@@ -1,70 +1,142 @@
 const qrcode = require('qrcode-terminal');
-const { Client, LocalAuth } = require('whatsapp-web.js');
+const { Client, LocalAuth, MessageMedia } = require('whatsapp-web.js');
+const puppeteer = require('puppeteer');
 const client = new Client({
-    authStrategy: new LocalAuth()
+  authStrategy: new LocalAuth(),
+  puppeteer: {
+    args: ['--no-sandbox'],
+  },
+});
+const fs = require('fs');
+
+client.on('qr', qr => {
+  qrcode.generate(qr, { small: true });
 });
 
-// Define las palabras clave y sus respuestas asociadas
-const keywords = {
+client.on('ready', () => {
+  console.log('Conexión exitosa nenes');
+});
 
-    'hola': ['¡Hola!', 'Hola papi', '¡Hola, ¿cómo estás?'],
-    'clima': ['El clima hoy es soleado y cálido.', 'Hoy hace un día hermoso.', 'El pronóstico dice que será un día soleado.'],
-    'noticias': ['Aquí tienes las últimas noticias...', 'En las noticias de hoy...', 'Las noticias más recientes son...'],
-    // Agrega más palabras clave y respuestas según tus necesidades
+// Función para eliminar tildes de las palabras
+const removeAccents = (str) => {
+  return str.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
 };
 
-// Respuestas generales cuando no encuentra una palabra clave específica
-const generalResponses = [
-    'No entiendo lo que quieres decir.',
-    'Lo siento, no tengo una respuesta para eso.',
-    'Ups, no encontré ninguna coincidencia.',
+// Palabras clave con respuestas aleatorias y secuencias de mensajes
+const keywordResponses = [
+  {
+    keywords: ['perro', 'primera secuencia'],
+    sequences: [
+      [
+        ['Mensaje 1 - Secuencia 1 (Opción 1)', 6000],
+        ['Mensaje 2 - Secuencia 1 (Opción 1)', 6000],
+        ['Mensaje 3 - Secuencia 1 (Opción 1)', 6000],
+        ['enviar imagen imagen1.jpg', 500],
+        ['Mensaje 4 - Secuencia 1 (Opción 1)', 6000],
+        ['enviar imagen Bang.gif', 6000],
+      ],
+      [
+        ['Mensaje 1 - Secuencia 1 (Opción 2)', 10000],
+        ['Mensaje 2 - Secuencia 1 (Opción 2)', 10000],
+        ['enviar imagen imagen2.jpg', 10000],
+        ['Mensaje 3 - Secuencia 1 (Opción 2)', 10000],
+      ],
+    ],
+  },
+  {
+    keywords: ['gato', 'segunda secuencia'],
+    sequences: [
+      [
+        ['Mensaje 1 - Secuencia 2 (Opción 1)', 2000],
+        ['enviar imagen imagen3.jpg', 500],
+        ['Mensaje 2 - Secuencia 2 (Opción 1)', 1000],
+        ['enviar imagen imagen4.jpg', 3000],
+      ],
+      [
+        ['Mensaje 1 - Secuencia 2 (Opción 2)', 2000],
+        ['enviar imagen imagen5.jpg', 1000],
+        ['Mensaje 2 - Secuencia 2 (Opción 2)', 3000],
+        ['enviar imagen imagen6.jpg', 500],
+        ['Mensaje 3 - Secuencia 2 (Opción 2)', 2000],
+      ],
+    ],
+  },
 ];
 
-// Función para normalizar el texto (minúsculas y sin acentos)
-function normalizeText(text) {
-    return text.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+// Respuestas aleatorias para mensajes desconocidos con tiempo personalizado
+const randomResponses = [
+  { message: 'Lo siento, no he reconocido tu mensaje.', delay: 2000 }, // Espera de 2 segundos
+  { message: 'No estoy seguro de cómo responder a eso.', delay: 60000 }, // Espera de 3 segundos
+];
+
+// Función para obtener una respuesta aleatoria de una lista con tiempo personalizado
+function getRandomResponseWithDelay(responsesList) {
+  const randomIndex = Math.floor(Math.random() * responsesList.length);
+  return responsesList[randomIndex];
 }
 
-
-// Función para obtener una respuesta aleatoria basada en el array
-function getRandomResponseFromArray(array) {
-    if (!array || array.length === 0) {
-        return 'Lo siento, no tengo una respuesta para eso.';
+// Función para verificar si el mensaje incluye alguna de las palabras clave asociadas con una secuencia
+function findSequence(message) {
+  const lowercaseMessage = removeAccents(message.toLowerCase()); // Eliminamos los acentos del mensaje
+  for (const response of keywordResponses) {
+    const keywords = response.keywords;
+    const found = keywords.some(keyword => {
+      const lowercaseKeyword = removeAccents(keyword.toLowerCase()); // Eliminamos los acentos de la palabra clave
+      return lowercaseMessage.includes(lowercaseKeyword);
+    });
+    if (found) {
+      return response;
     }
-    const randomIndex = Math.floor(Math.random() * array.length);
-    return array[randomIndex];
+  }
+  return null;
 }
 
-// Función para obtener una respuesta aleatoria basada en la palabra clave
-function getRandomResponse(keyword) {
-    const normalizedKeyword = normalizeText(keyword);
-    const responses = keywords[normalizedKeyword];
-    return getRandomResponseFromArray(responses) || getRandomResponseFromArray(generalResponses);
-}
+// Función para enviar mensajes con intervalos de tiempo y seleccionar una secuencia aleatoria
+async function sendSequenceMessages(chatId, sequences) {
+  const randomSequenceIndex = Math.floor(Math.random() * sequences.length);
+  const randomSequence = sequences[randomSequenceIndex];
 
-// ...
-
-// Evento que se dispara cuando el bot recibe un código QR para iniciar sesión
-client.on('qr', qr => {
-    // No mostrar el código QR en la consola
-});
-
-// Evento que se dispara cuando el bot está listo y conectado
-client.on('ready', () => {
-    console.log('Conexión exitosa nenes');
-});
-
-// Evento que se dispara cuando el bot recibe un mensaje
-client.on('message', async message => {
-    const userMessage = message.body;
-    const response = getRandomResponse(userMessage);
-
-    // Verifica que el mensaje no sea del propio bot antes de responder
-    if (!message.fromMe) {
-        await message.reply(response);
-        console.log('Respuesta enviada:', response); // Muestra la respuesta enviada en la consola para fines de registro, puedes eliminar esta línea si lo deseas.
+  for (const [message, interval] of randomSequence) {
+    if (message.startsWith('enviar imagen')) {
+      // Es una solicitud para enviar una imagen o video
+      const imagePath = message.substring(14).trim();
+      if (fs.existsSync(imagePath)) {
+        const media = MessageMedia.fromFilePath(imagePath);
+        await client.sendMessage(chatId, media);
+      } else {
+        await client.sendMessage(chatId, 'No se encontró la imagen.');
+      }
+    } else {
+      await new Promise(resolve => setTimeout(resolve, interval));
+      await client.sendMessage(chatId, message);
     }
-});
+  }
+}
 
-// Inicialización del cliente
-client.initialize();
+// Función para manejar los mensajes entrantes
+async function handleIncomingMessage(message) {
+  console.log(message.body);
+  const matchedResponse = findSequence(message.body);
+  if (matchedResponse) {
+    if (matchedResponse.responses) {
+      const randomResponse = getRandomResponse(matchedResponse.responses);
+      await client.sendMessage(message.from, randomResponse);
+    } else if (matchedResponse.sequences) {
+      const sequences = matchedResponse.sequences;
+      await sendSequenceMessages(message.from, sequences);
+    }
+  } else {
+    const randomResponse = getRandomResponseWithDelay(randomResponses);
+    await new Promise(resolve => setTimeout(resolve, randomResponse.delay));
+    await client.sendMessage(message.from, randomResponse.message);
+  }
+}
+
+// Manejar eventos de mensajes
+client.on('message', handleIncomingMessage);
+
+// Función para inicializar el cliente y navegar a WhatsApp Web con opciones de espera
+(async () => {
+  const browser = await puppeteer.launch({ args: ['--no-sandbox'] });
+  client.initialize(browser);
+})();
